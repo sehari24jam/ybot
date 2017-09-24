@@ -34,9 +34,17 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		"Send me asciidoc file (.adoc). I don't understand: "+update.Message.Text)
 	msg.ReplyToMessageID = update.Message.MessageID
 
-	if update.Message.Document == nil {
+	switch update.Message.Text {
+	case "/start":
+		msg.Text = fmt.Sprintf("Welcome %s (%s %s). You may send me asciidoc (.adoc) file",
+			update.Message.From.UserName, update.Message.From.FirstName, update.Message.From.LastName)
 		bot.Send(msg)
 		return
+	default:
+		if update.Message.Document == nil {
+			bot.Send(msg)
+			return
+		}
 	}
 
 	f, err := bot.GetFile(tgbotapi.FileConfig{FileID: update.Message.Document.FileID})
