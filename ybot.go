@@ -61,7 +61,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	f, err := bot.GetFile(tgbotapi.FileConfig{FileID: update.Message.Document.FileID})
 	//log.Printf("DocFile: %s", update.Message.Document.FileName)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 		if Noisy {
 			msg.Text = "Failed to proceed uploaded file"
 		}
@@ -72,13 +72,14 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	ext := path.Ext(update.Message.Document.FileName)
 	tmp := path.Join(os.TempDir(), "ybot."+update.Message.Chat.UserName)
 	zipped := false
+	//tararc := false
 	switch strings.ToLower(ext) {
 
 	case ".zip", ".rar", ".7z":
 		zipped = true
 		tmp, err = ioutil.TempDir("", "ybot-")
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
 			log.Print(os.RemoveAll(tmp))
 			if Noisy {
 				msg.Text = "Unable to create temp"
@@ -106,7 +107,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	// get WorkFile from TG
 	response, err := http.Get(f.Link(*token))
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 		if zipped {
 			log.Print(os.RemoveAll(tmp))
 		}
@@ -124,7 +125,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	// save WorkFile
 	file, err := os.Create(workfile)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 		if zipped {
 			log.Print(os.RemoveAll(tmp))
 		}
@@ -138,7 +139,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	_, err = io.Copy(file, response.Body)
 	file.Close()
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 		if zipped {
 			log.Print(os.RemoveAll(tmp))
 		}
@@ -155,7 +156,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			cmd.Dir = workfolder
 			out, err := cmd.CombinedOutput()
 			if err != nil {
-				log.Fatal(err)
+				log.Print(err)
 				if zipped {
 					log.Print(os.RemoveAll(tmp))
 				}
@@ -172,7 +173,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		cmd.Dir = workfolder
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			//log.Fatal(err) // causing crash
+			log.Print(err)
 			if zipped {
 				log.Print(os.RemoveAll(tmp))
 			}
@@ -186,7 +187,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		if zipped {
 			files, err := filepath.Glob(path.Join(workfolder, "*.pdf"))
 			if err != nil {
-				log.Fatal(err)
+				log.Print(err)
 				if zipped {
 					log.Print(os.RemoveAll(tmp))
 				}
@@ -243,7 +244,7 @@ func main() {
 		//log.Print(url)
 		_, err = bot.SetWebhook(tgbotapi.NewWebhookWithCert(url, *cert))
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
 		}
 
 		updates := bot.ListenForWebhook("/" + bot.Token)
