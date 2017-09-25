@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -47,7 +48,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	case "/start":
 		msg.Text = fmt.Sprintf("Welcome %s (%s %s).\n"+
 			"You may send me asciidoc (.adoc) file.\n"+
-			"Or you can pack whole *.adoc and its included images + sub-adoc into a single zip file.",
+			"Or you can pack whole *.adoc and its included images + sub-adoc into a single compressed file.",
 			update.Message.From.UserName, update.Message.From.FirstName, update.Message.From.LastName)
 		bot.Send(msg)
 		return
@@ -72,12 +73,42 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	ext := path.Ext(update.Message.Document.FileName)
 	tmp := path.Join(os.TempDir(), "ybot."+update.Message.Chat.UserName)
-	zipped := false
-	//tararc := false
+	packed := false
+	dpacked := false
+
 	switch strings.ToLower(ext) {
 
 	case ".zip", ".rar", ".7z":
-		zipped = true
+		packed = true
+		msg.Text = "Looks good, let me work on this compressed file"
+
+	case ".tgz", ".tbz2", ".txz":
+		dpacked = true
+		msg.Text = "Looks good, let me work on this compressed file."
+
+	case ".gz", ".bz2", ".xz":
+		ftar := strings.TrimSuffix(update.Message.Document.FileName, ext)
+		exttar := path.Ext(ftar)
+		if exttar == ".tar" {
+			dpacked = true
+			msg.Text = "Looks good, let me work on this compressed file.."
+			ext = exttar + ext
+		} else {
+			msg.Text = "Document is not an adoc"
+			bot.Send(msg)
+			return
+		}
+
+	case ".adoc":
+		msg.Text = "Looks good, let me work on this file"
+
+	default:
+		msg.Text = "Document is not an adoc"
+		bot.Send(msg)
+		return
+	}
+
+	if packed || dpacked {
 		tmp, err = ioutil.TempDir("", "ybot-")
 		if err != nil {
 			log.Print(err)
@@ -88,18 +119,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			bot.Send(msg)
 			return
 		}
-		msg.Text = "Looks good, let me work on this zip file"
-		bot.Send(msg)
-
-	case ".adoc":
-		msg.Text = "Looks good, let me work on this file"
-		bot.Send(msg)
-
-	default:
-		msg.Text = "Document is not an adoc"
-		bot.Send(msg)
-		return
 	}
+	bot.Send(msg)
+
 	workfolder := path.Join(tmp, path.Dir(f.FilePath))
 	//lfile := path.Join("/tmp", f.FilePath)
 	pdffile := path.Join(workfolder, strings.TrimSuffix(update.Message.Document.FileName, ext)+".pdf")
@@ -109,7 +131,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	response, err := http.Get(f.Link(*token))
 	if err != nil {
 		log.Print(err)
-		if zipped {
+		if packed || dpacked {
 			log.Print(os.RemoveAll(tmp))
 		}
 		if Noisy {
@@ -127,7 +149,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	file, err := os.Create(workfile)
 	if err != nil {
 		log.Print(err)
-		if zipped {
+		if packed || dpacked {
 			log.Print(os.RemoveAll(tmp))
 		}
 		if Noisy {
@@ -141,7 +163,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	file.Close()
 	if err != nil {
 		log.Print(err)
-		if zipped {
+		if packed || dpacked {
 			log.Print(os.RemoveAll(tmp))
 		}
 		if Noisy {
@@ -152,13 +174,15 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	}
 
 	go func() {
-		if zipped {
+		///////////////////////////////////// extraction
+		switch {
+		case packed:
 			cmd := exec.Command("7z", "x", workfile)
 			cmd.Dir = workfolder
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				log.Print(err)
-				if zipped {
+				if packed {
 					log.Print(os.RemoveAll(tmp))
 				}
 				if Noisy {
@@ -168,14 +192,38 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 				return
 			}
 			workfile = "*.adoc"
+		case dpacked:
+			var out bytes.Buffer
+			xcmd1 := exec.Command("7z", "x", workfile, "-so")
+			xcmd1.Dir = workfolder
+			xcmd2 := exec.Command("7z", "x", "-si", "-ttar", "-y")
+			xcmd2.Dir = workfolder
+			xcmd2.Stdin, _ = xcmd1.StdoutPipe()
+			xcmd2.Stdout = &out
+			_ = xcmd2.Start()
+			_ = xcmd1.Run()
+			err := xcmd2.Wait()
+			if err != nil {
+				log.Print(err)
+				if packed {
+					log.Print(os.RemoveAll(tmp))
+				}
+				if Noisy {
+					msg.Text = fmt.Sprintf("Failed %v\n%v", string(out.Bytes()), err)
+				}
+				bot.Send(msg)
+				return
+			}
+			workfile = "*.adoc"
 		}
 
+		///////////////////////////////////// conversion
 		cmd := exec.Command("Ad", workfile)
 		cmd.Dir = workfolder
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Print(err)
-			if zipped {
+			if packed {
 				log.Print(os.RemoveAll(tmp))
 			}
 			if Noisy {
@@ -185,13 +233,11 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			return
 		}
 
-		if zipped {
+		if packed || dpacked {
 			files, err := filepath.Glob(path.Join(workfolder, "*.pdf"))
 			if err != nil {
 				log.Print(err)
-				if zipped {
-					log.Print(os.RemoveAll(tmp))
-				}
+				log.Print(os.RemoveAll(tmp))
 				if Noisy {
 					msg.Text = fmt.Sprintf("Failed %v..", err)
 				}
