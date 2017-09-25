@@ -42,7 +42,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	switch update.Message.Text {
 	case "/start":
-		msg.Text = fmt.Sprintf("Welcome %s (%s %s).\nYou may send me asciidoc (.adoc) file",
+		msg.Text = fmt.Sprintf("Welcome %s (%s %s).\nYou may send me asciidoc (.adoc) file.\nOr you can pack whole *.adoc and its included images and sub-adoc into a single zip file.",
 			update.Message.From.UserName, update.Message.From.FirstName, update.Message.From.LastName)
 		bot.Send(msg)
 		return
