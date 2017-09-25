@@ -24,6 +24,8 @@ var pubip = flag.String("pubip", "", "public ip, get with 'curl -s https://ipinf
 var port = flag.Int("port", 8443, "webhook server port")
 var cert = flag.String("cert", "cert.pem", "cert for webhook https server")
 var key = flag.String("key", "key.pem", "priv key for webhook https server")
+var pathAd = flag.String("Ad", func() string { p, _ := exec.LookPath("Ad"); return p }(), "path to Ad")
+var path7z = flag.String("7z", func() string { p, _ := exec.LookPath("7z"); return p }(), "path to 7z")
 
 func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
@@ -42,7 +44,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	switch update.Message.Text {
 	case "/start":
-		msg.Text = fmt.Sprintf("Welcome %s (%s %s).\nYou may send me asciidoc (.adoc) file.\nOr you can pack whole *.adoc and its included images and sub-adoc into a single zip file.",
+		msg.Text = fmt.Sprintf("Welcome %s (%s %s).\n"+
+			"You may send me asciidoc (.adoc) file.\n"+
+			"Or you can pack whole *.adoc and its included images + sub-adoc into a single zip file.",
 			update.Message.From.UserName, update.Message.From.FirstName, update.Message.From.LastName)
 		bot.Send(msg)
 		return
@@ -70,7 +74,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	zipped := false
 	switch strings.ToLower(ext) {
 
-	case ".zip":
+	case ".zip", ".rar", ".7z":
 		zipped = true
 		tmp, err = ioutil.TempDir("", "ybot-")
 		if err != nil {
@@ -149,30 +153,31 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		if zipped {
 			cmd := exec.Command("7z", "x", workfile)
 			cmd.Dir = workfolder
-			out, err := cmd.Output()
+			out, err := cmd.CombinedOutput()
 			if err != nil {
 				log.Fatal(err)
 				if zipped {
 					log.Print(os.RemoveAll(tmp))
 				}
 				if Noisy {
-					msg.Text = fmt.Sprintf("Failed %v\n%v", out, err)
+					msg.Text = fmt.Sprintf("Failed %v\n%v", string(out), err)
 				}
 				bot.Send(msg)
 				return
 			}
 			workfile = "*.adoc"
 		}
+
 		cmd := exec.Command("Ad", workfile)
 		cmd.Dir = workfolder
-		out, err := cmd.Output()
+		out, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Fatal(err)
+			//log.Fatal(err) // causing crash
 			if zipped {
 				log.Print(os.RemoveAll(tmp))
 			}
 			if Noisy {
-				msg.Text = fmt.Sprintf("Failed %v\n%v", out, err)
+				msg.Text = fmt.Sprintf("Failed %v\n%v", string(out), err)
 			}
 			bot.Send(msg)
 			return
@@ -186,7 +191,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 					log.Print(os.RemoveAll(tmp))
 				}
 				if Noisy {
-					msg.Text = fmt.Sprintf("Failed %v", err)
+					msg.Text = fmt.Sprintf("Failed %v..", err)
 				}
 				bot.Send(msg)
 				return
@@ -196,15 +201,15 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 				bot.Send(tgbotapi.NewDocumentUpload(msg.ChatID, f))
 			}
 			if Noisy {
-				msg.Text = fmt.Sprintf("Success %v", out)
+				msg.Text = fmt.Sprintf("Success %v..", string(out))
 			} else {
-				msg.Text = "Success"
+				msg.Text = "Success.."
 			}
 			bot.Send(msg)
 			log.Print(os.RemoveAll(tmp))
 		} else {
 			if Noisy {
-				msg.Text = fmt.Sprintf("Success %v", out)
+				msg.Text = fmt.Sprintf("Success %v", string(out))
 			} else {
 				msg.Text = "Success"
 			}
