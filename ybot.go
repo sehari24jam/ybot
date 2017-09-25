@@ -16,6 +16,7 @@ import (
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+var ssl = flag.Int("ssl", 0, "0:no ssl, 1:SelfSign, 2:CA-cert")
 var webhook = flag.Bool("webhook", false, "webhook mode")
 var debug = flag.Bool("debug", false, "debug")
 var noisy = flag.Bool("noisy", false, "noisy")
@@ -240,15 +241,41 @@ func main() {
 
 	if *webhook {
 
-		url := fmt.Sprintf("https://%s:%d/%s", *pubip, *port, bot.Token)
-		//log.Print(url)
-		_, err = bot.SetWebhook(tgbotapi.NewWebhookWithCert(url, *cert))
-		if err != nil {
-			log.Print(err)
-		}
+		var updates tgbotapi.UpdatesChannel
+		switch *ssl {
+		case 1:
+			url := fmt.Sprintf("https://%s:%d/%s", *pubip, *port, bot.Token)
+			log.Print("Webhook URL: " + url)
+			_, err = bot.SetWebhook(tgbotapi.NewWebhookWithCert(url, *cert))
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		updates := bot.ListenForWebhook("/" + bot.Token)
-		go http.ListenAndServeTLS(fmt.Sprintf("0.0.0.0:%d", *port), *cert, *key, nil)
+			updates = bot.ListenForWebhook("/" + bot.Token)
+			go http.ListenAndServeTLS(fmt.Sprintf("0.0.0.0:%d", *port), *cert, *key, nil)
+
+		case 2:
+			url := fmt.Sprintf("https://%s:%d/%s", *pubip, *port, bot.Token)
+			log.Print("Webhook URL: " + url)
+			_, err = bot.SetWebhook(tgbotapi.NewWebhook(url))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			updates = bot.ListenForWebhook("/" + bot.Token)
+			go http.ListenAndServeTLS(fmt.Sprintf("0.0.0.0:%d", *port), *cert, *key, nil)
+
+		default:
+			url := fmt.Sprintf("http://%s:%d/%s", *pubip, *port, bot.Token)
+			log.Print("Webhook URL: " + url)
+			_, err = bot.SetWebhook(tgbotapi.NewWebhook(url))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			updates = bot.ListenForWebhook("/" + bot.Token)
+			go http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", *port), nil)
+		}
 
 		log.Printf("Starting Collect Update from WebHook")
 		for update := range updates {
