@@ -92,6 +92,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	default:
 		msg.Text = "Document is not an adoc"
 		bot.Send(msg)
+		return
 	}
 	workfolder := path.Join(tmp, path.Dir(f.FilePath))
 	//lfile := path.Join("/tmp", f.FilePath)
