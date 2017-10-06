@@ -21,7 +21,7 @@ var ssl = flag.Int("ssl", 0, "0:no ssl, 1:SelfSign, 2:CA-cert")
 var webhook = flag.Bool("webhook", false, "webhook mode")
 var debug = flag.Bool("debug", false, "debug")
 var noisy = flag.Bool("noisy", false, "noisy")
-var token = flag.String("token", "", "token")
+var token = flag.String("token", os.Getenv("YBOTTOKEN"), "token")
 var pubip = flag.String("pubip", "", "public ip, get with 'curl -s https://ipinfo.io/ip'")
 var port = flag.Int("port", 8443, "webhook server port")
 var cert = flag.String("cert", "cert.pem", "cert for webhook https server")
@@ -194,7 +194,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			workfile = "*.adoc"
 		case dpacked:
 			var out bytes.Buffer
-			xcmd1 := exec.Command("7z", "x", workfile, "-so")
+			xcmd1 := exec.Command("7z", "x", "-so", workfile)
 			xcmd1.Dir = workfolder
 			xcmd2 := exec.Command("7z", "x", "-si", "-ttar", "-y")
 			xcmd2.Dir = workfolder
@@ -273,9 +273,9 @@ func main() {
 
 	flag.Parse()
 
-	if *token == "" {
-		*token = os.Getenv("YBOTTOKEN")
-	}
+	//if *token == "" {
+	//	*token = os.Getenv("YBOTTOKEN")
+	//}
 	bot, err := tgbotapi.NewBotAPI(*token)
 	if err != nil {
 		log.Panic(err)
