@@ -116,7 +116,6 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 	default:
 		msg.Text = "Document is not an adoc. I might just keep it for next processing"
-		bot.Send(msg)
 		unknown = true
 	}
 
@@ -133,6 +132,8 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			return
 		}
 	}
+
+	/// message user we have something
 	bot.Send(msg)
 
 	if unknown && !*keepother {
