@@ -26,8 +26,11 @@ var pubip = flag.String("pubip", "", "public ip, get with 'curl -s https://ipinf
 var port = flag.Int("port", 8443, "webhook server port")
 var cert = flag.String("cert", "cert.pem", "cert for webhook https server")
 var key = flag.String("key", "key.pem", "priv key for webhook https server")
-var pathAd = flag.String("Ad", func() string { p, _ := exec.LookPath("Ad"); return p }(), "path to Ad")
+// path for required bin/util
+//var pathAd = flag.String("Ad", func() string { p, _ := exec.LookPath("Ad"); return p }(), "path to Ad")
 var path7z = flag.String("7z", func() string { p, _ := exec.LookPath("7z"); return p }(), "path to 7z")
+var pathAdoc = flag.String("adoc", func() string { p, _ := exec.LookPath("asciidoctor"); return p }(), "path to asciidoctor")
+var pathGs = flag.String("gs", func() string { p, _ := exec.LookPath("gs"); return p }(), "path to gs")
 
 func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
@@ -177,7 +180,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		///////////////////////////////////// extraction
 		switch {
 		case packed:
-			cmd := exec.Command("7z", "x", workfile)
+			cmd := exec.Command(*path7z, "x", workfile)
 			cmd.Dir = workfolder
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -194,9 +197,9 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			workfile = "*.adoc"
 		case dpacked:
 			var out bytes.Buffer
-			xcmd1 := exec.Command("7z", "x", "-so", workfile)
+			xcmd1 := exec.Command(*path7z, "x", "-so", workfile)
 			xcmd1.Dir = workfolder
-			xcmd2 := exec.Command("7z", "x", "-si", "-ttar", "-y")
+			xcmd2 := exec.Command(*path7z, "x", "-si", "-ttar", "-y")
 			xcmd2.Dir = workfolder
 			xcmd2.Stdin, _ = xcmd1.StdoutPipe()
 			xcmd2.Stdout = &out
@@ -218,21 +221,89 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		}
 
 		///////////////////////////////////// conversion
-		cmd := exec.Command("Ad", workfile)
-		cmd.Dir = workfolder
-		out, err := cmd.CombinedOutput()
+		files, err := filepath.Glob(path.Join(workfolder, "*.adoc"))
 		if err != nil {
 			log.Print(err)
 			if packed {
 				log.Print(os.RemoveAll(tmp))
 			}
 			if Noisy {
-				msg.Text = fmt.Sprintf("Failed %v\n%v", string(out), err)
+				msg.Text = fmt.Sprintf("Failed %v.", err)
 			}
 			bot.Send(msg)
 			return
 		}
 
+		for _, f := range files {
+			log.Print("Processing %v", f)
+			cmd := exec.Command(*pathAdoc, "-a", "allow-uri-read", "-r", "asciidoctor-diagram", "-r", "asciidoctor-pdf", "-b", "pdf", f)
+			cmd.Dir = workfolder
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Print(err)
+				if packed {
+					log.Print(os.RemoveAll(tmp))
+				}
+				if Noisy {
+					msg.Text = fmt.Sprintf("Failed %v\n%v", string(out), err)
+				}
+				bot.Send(msg)
+				return
+			}
+		}
+
+		///////////////////////////////////// optimizing
+		pdffiles, pdferr := filepath.Glob(path.Join(workfolder, "*.pdf"))
+		if pdferr != nil {
+			log.Print(pdferr)
+			if packed {
+				log.Print(os.RemoveAll(tmp))
+			}
+			if Noisy {
+				msg.Text = fmt.Sprintf("Failed %v.", pdferr)
+			}
+			bot.Send(msg)
+			return
+		}
+
+		for _, f := range pdffiles {
+			log.Print("Optimizing %v", f)
+			gcmd := exec.Command(*pathGs, "-q",
+				"-dNOPAUSE", "-dBATCH", "-dSAFER", "-dNOOUTERSAVE",
+				"-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4",
+				"-dPDFSETTINGS=/prepress", "-dCannotEmbedFontPolicy=/Warning",
+				"-dDownsampleColorImages=true", "-dColorImageResolution=300",
+				"-dDownsampleGrayImages=true", "-dGrayImageResolution=300",
+				"-dDownsampleMonoImages=true", "-dMonoImageResolution=300",
+				"-sOutputFile=_"+f, f)
+			gcmd.Dir = workfolder
+			gout, gerr := gcmd.CombinedOutput()
+			if err != nil {
+				log.Print(gerr)
+				if packed {
+					log.Print(os.RemoveAll(tmp))
+				}
+				if Noisy {
+					msg.Text = fmt.Sprintf("Failed %v\n%v", string(gout), gerr)
+				}
+				bot.Send(msg)
+				return
+			}
+			err := os.Rename("_"+f, f)
+			if err != nil {
+				log.Print(err)
+				if packed {
+					log.Print(os.RemoveAll(tmp))
+				}
+				if Noisy {
+					msg.Text = fmt.Sprintf("Failed %v", err)
+				}
+				bot.Send(msg)
+				return
+			}
+		}
+
+		///////////////////////////////////// send
 		if packed || dpacked {
 			files, err := filepath.Glob(path.Join(workfolder, "*.pdf"))
 			if err != nil {
@@ -248,19 +319,19 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			for _, f := range files {
 				bot.Send(tgbotapi.NewDocumentUpload(msg.ChatID, f))
 			}
-			if Noisy {
-				msg.Text = fmt.Sprintf("Success %v..", string(out))
-			} else {
+			//if Noisy {
+			//	msg.Text = fmt.Sprintf("Success %v..", string(out))
+			//} else {
 				msg.Text = "Success.."
-			}
+			//}
 			bot.Send(msg)
 			log.Print(os.RemoveAll(tmp))
 		} else {
-			if Noisy {
-				msg.Text = fmt.Sprintf("Success %v", string(out))
-			} else {
+			//if Noisy {
+			//	msg.Text = fmt.Sprintf("Success %v", string(out))
+			//} else {
 				msg.Text = "Success"
-			}
+			//}
 			bot.Send(msg)
 			bot.Send(tgbotapi.NewDocumentUpload(msg.ChatID, pdffile))
 		}
