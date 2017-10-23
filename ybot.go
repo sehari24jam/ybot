@@ -17,6 +17,9 @@ import (
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+//go:generate bash -c "printf \"package main\\nvar Version = \\\"%s\\\"\\n\" `git describe --tags --long` | tee version.go"
+
+var version = flag.Bool("version", false, "version")
 var debug = flag.Bool("debug", false, "debug")
 var noisy = flag.Bool("noisy", false, "noisy")
 var keepother = flag.Bool("keepother", false, "keepother")
@@ -359,6 +362,11 @@ func handleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 func main() {
 
 	flag.Parse()
+
+        if *version {
+                fmt.Println(Version)
+                return
+        }
 
 	//if *token == "" {
 	//	*token = os.Getenv("YBOTTOKEN")
