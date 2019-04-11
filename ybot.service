@@ -1,0 +1,12 @@
+[Unit]
+Description=YBot
+After=network.target
+
+[Service]
+WorkingDirectory=/tmp
+Environment=YBOTTOKEN=XXXXXXXXXXXXXX
+ExecStart=/home/USER/gofiles/bin/ybot
+
+[Install]
+WantedBy=default.target
+
